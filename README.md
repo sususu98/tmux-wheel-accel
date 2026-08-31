@@ -3,70 +3,76 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-orange.svg)](https://www.rust-lang.org/)
 
-**tmux-wheel-accel** 是一个专为 `tmux` 打造的微秒级动态滚轮加速度（Velocity-based Dynamic Acceleration）原生程序。
+**tmux-wheel-accel** 是一个专为 `tmux` 打造的微秒级 **6档自适应智能滚轮变速箱（6-Gear Velocity Acceleration）** 原生程序。
 
-特别针对 **罗技 Logitech G502 / MX Master 系列的无极/疾速滚轮（Free-Spin / HyperScroll）** 以及 **Apple Magic Trackpad 触控板** 深度调校，彻底解决在 tmux / Terminal 下“慢滚太快、快转太慢、卡顿延迟、溜冰反弹”等痛点。
+特别针对 **罗技 Logitech G502 / MX Master 系列的无极/疾速滚轮（Free-Spin / HyperScroll）** 以及 **Apple Magic Trackpad 触控板** 深度调校，彻底解决在 tmux / Terminal 下“慢滚太快、快转太慢、卡顿延迟、溜冰反弹、缺少高速档”等痛点。
 
-支持通过 **`~/.config/tmux-wheel-accel/config.toml`** 自由配置核心参数，具备**微秒级内存二进制缓存与修改即时热重载（Hot-Reload）**特性！
+支持通过 **`~/.config/tmux-wheel-accel/config.toml`** 自由微调 6 档位的每一个参数，具备**微秒级内存二进制缓存与修改即时热重载（Hot-Reload）**特性！
 
 ---
 
 ## ✨ 核心特性
 
-- ⚡️ **微秒级执行**：单次执行开销 < 0.05ms，具备 48 字节内存二进制缓存，无锁、无阻塞、零延迟。
-- ⚙️ **随时热重载配置**：支持在 `~/.config/tmux-wheel-accel/config.toml` 中自定义所有参数，**保存文件即刻生效，无需重启 tmux**。
-- 🎯 **慢拨逐行精读**：单格慢拨或刻度精读时，严格单行（`1 行`）精准跳动，彻底告别误翻与回弹。
-- 🚀 **无极飞轮极速升档**：当拨动 G502 / MX Master 物理飞轮时，根据物理旋转频率与连击动态倍增至 `6 ~ 14 行/次`，轻轻一拨瞬间翻阅数千行日志。
-- 🛡 **触控板绝佳适配**：触摸板手势区间（$\Delta t \ge 7.5\text{ms}$）严格锁定为基础行数（1 行），双指轻滑平滑细腻，不再因终端高频事件一滑冲顶。
+- 🏎 **6 档自适应变速箱**：从 1档逐行精读（2 行），到 2档触控板稳速巡航（2 行），再到 6档无极飞轮红线疾速起飞（32 行/次），无缝线性升档。
+- ⚡️ **微秒级极速执行**：单次执行开销 < 0.05ms，具备 56 字节内存二进制缓存，无锁、无阻塞、零延迟。
+- 🚀 **消灭首格滚轮延迟**：Root 表瞬发启动，进入 `copy-mode` 的第一微秒立即同步滚动，告别首格被吞的迟钝感。
+- ⚙️ **随时热重载配置**：支持在 `~/.config/tmux-wheel-accel/config.toml` 中自定义各档位步长，**保存文件即刻生效，无需重启 tmux**。
+- 🛡 **触控板绝佳适配**：触摸板手势区间（$\Delta t \ge 12\text{ms}$）严格锁定在 2档（2 行），双指轻滑平滑细腻，不再因终端高频事件一滑冲顶。
 - 🔒 **按 Pane 独立隔离**：状态存储于 `/tmp` 内存映射，多 Pane、多窗口、多会话并发滚动完全互不干扰。
+
+---
+
+## 🏎 6 档位自适应变速表
+
+| 档位 | 适用场景与动作 | 时间间隔 ($\Delta t$) | 单次跳行步长 | 体验特性 |
+| :--- | :--- | :--- | :--- | :--- |
+| **1 档** | 单格慢拨 / 逐行精读 | $\ge 50\text{ms}$ | **2 行** | 精准核对单行代码、无误跳 |
+| **2 档** | 触摸板手势 / 慢速连续巡航 | $12\text{ms} \sim 50\text{ms}$ | **2 行** | **触控板双指滑动细腻、平缓可控** |
+| **3 档** | 正常翻阅代码 | $7\text{ms} \sim 12\text{ms}$ | **4 行** | 轻松翻阅 |
+| **4 档** | 快速连续拨轮 | $4\text{ms} \sim 7\text{ms}$ | **8 行** | 快速看长函数 |
+| **5 档** | G502 无极飞轮中高速 | $2\text{ms} \sim 4\text{ms}$ | **16 行** | 飞速滑过几百行 |
+| **6 档** | **G502 物理飞轮红线狂转** | $< 2\text{ms}$ (超高频) | **32 行** | **真正 6 档红线起飞，瞬间翻越几千行！** |
 
 ---
 
 ## ⚙️ 配置文件说明 (`~/.config/tmux-wheel-accel/config.toml`)
 
-程序首次运行时会自动在 `~/.config/tmux-wheel-accel/config.toml` 生成带有完整注释的配置文件：
+程序运行时会自动在 `~/.config/tmux-wheel-accel/config.toml` 生成带有完整注释的配置文件：
 
 ```toml
 # ~/.config/tmux-wheel-accel/config.toml
-# tmux-wheel-accel 核心参数配置文件
-# 修改此文件后无需重启 tmux，下次滚动滚轮立即热加载生效！
+# 6档自适应智能滚轮变速箱配置
+# 保存此文件后无需重启 tmux，下次滚动滚轮立即热重载生效！
 
-# 单格慢拨与逐行精读的基础行数（默认 1 行）
-base_lines = 1
-
-# 连续滚动连击超时时间 (毫秒)
-# 两次事件间隔超过此值时，判定为全新的单次滚动，重置连击计数器
+# 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
 streak_timeout_ms = 50.0
 
-# 进入加速档位所需的最小连续触发次数（防误触保护，默认 5 次）
-min_streak_for_accel = 5
+# 加速起步保护次数（前 N 次滚动严格保持 1档/2档，防误触）
+min_streak_for_accel = 4
 
-# 触摸板与慢速手势保护阈值 (毫秒)
-# 触摸板滑动间隔通常在 12ms ~ 40ms，事件间隔 >= 该值时严格锁定为 base_lines
-trackpad_lock_threshold_ms = 7.5
+# ----------------------------------------------------
+# 6 档位跳行步长配置 (Gear 1 ~ 6)
+# ----------------------------------------------------
 
-# 中转速飞轮阈值 (毫秒)
-medium_accel_threshold_ms = 4.5
+# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 50ms)
+gear1_lines = 2
 
-# 中转速飞轮基础行数与最大额外加成
-medium_accel_base_lines = 3
-medium_accel_max_boost = 3
+# 2档: 触摸板平稳手势 / 中慢速巡航 (时间间隔 12ms ~ 50ms)
+# 触摸板滑动主要落在此档，锁定 2 行保证绝不偏快
+gear2_lines = 2
 
-# G502 / MX Master 物理飞轮疾速狂转 (< medium_accel_threshold_ms) 基础行数与最大加成
-high_accel_base_lines = 6
-high_accel_max_boost = 8
+# 3档: 较快翻阅代码 (时间间隔 7ms ~ 12ms)
+gear3_lines = 4
+
+# 4档: 快速拨轮翻段落 (时间间隔 4ms ~ 7ms)
+gear4_lines = 8
+
+# 5档: G502 无极飞轮中高速旋转 (时间间隔 2ms ~ 4ms)
+gear5_lines = 16
+
+# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (时间间隔 < 2ms 超高频)
+gear6_lines = 32
 ```
-
----
-
-## 📈 动态自适应速度曲线
-
-| 滚动动作 | 触发时间差 ($\Delta t$) | 单次跳行步长 | 体验与场景 |
-| :--- | :--- | :--- | :--- |
-| **单格刻度 / 逐行精读** | $\ge 50\text{ms}$ | **1 行** (`base_lines`) | 精准核对单行代码、无误跳 |
-| **触摸板连续平滑手势** | $12\text{ms} \sim 40\text{ms}$ | **1 行** (`base_lines`) | **触控板双指滑动细腻、平缓可控、不偏快** |
-| **中高转速飞轮** | $4.5\text{ms} \sim 7.5\text{ms}$ | **3 ~ 6 行** | 平稳升档 |
-| **G502 无极飞轮疾速狂转** | $< 4.5\text{ms}$（超高频物理飞轮） | **6 ~ 14 行** | 飞轮疾速翻越几千行历史 |
 
 ---
 
@@ -88,7 +94,13 @@ cd tmux-wheel-accel
 # 启用鼠标支持
 set -g mouse on
 
-# 智能动态滚轮加速度（Rust 原生微秒级加速器）
+# 1. 首格滚轮零延迟响应（进入 copy-mode 瞬间立即启动 6档变速箱）
+bind-key -T root WheelUpPane \
+  if-shell -F "#{||:#{alternate_on},#{pane_in_mode},#{mouse_any_flag}}" \
+    "send-keys -M" \
+    "copy-mode -e; run-shell -b \"~/.local/bin/tmux-wheel-accel \\\"#{pane_id}\\\" up\""
+
+# 2. 6档自适应智能滚轮加速（微秒级 Rust 原生程序）
 bind-key -T copy-mode WheelUpPane select-pane \; run-shell -b "~/.local/bin/tmux-wheel-accel \"#{pane_id}\" up"
 bind-key -T copy-mode WheelDownPane select-pane \; run-shell -b "~/.local/bin/tmux-wheel-accel \"#{pane_id}\" down"
 bind-key -T copy-mode-vi WheelUpPane select-pane \; run-shell -b "~/.local/bin/tmux-wheel-accel \"#{pane_id}\" up"
@@ -101,16 +113,6 @@ bind-key -T copy-mode-vi WheelDownPane select-pane \; run-shell -b "~/.local/bin
 ```bash
 tmux source-file ~/.tmux.conf
 ```
-或在 tmux 内按下 `Prefix + :` 输入 `source-file ~/.tmux.conf`。
-
----
-
-## 💡 macOS 配合 Mos 最佳实践
-
-如果你在 macOS 上使用 **Mos**（平滑滚动工具）：
-1. 在 Mos 的 **偏好设置 -> 例外应用** 中将终端（如 `iTerm2` / `Ghostty` / `Alacritty`）加入例外；
-2. **关闭终端的平滑滚动 (`smooth: false`)**，保留自然滚动方向 (`reverse: true`)；
-3. 将 Mos 的滚动死区（`deadZone`）设为 `2.0 ~ 2.5`，可彻底消除 G502 重金属滚轮手指离开时的微反弹。
 
 ---
 

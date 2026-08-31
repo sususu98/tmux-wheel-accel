@@ -14,70 +14,72 @@ extern "C" {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Config {
-    /// 单格慢拨与逐行精读的基础行数（默认 1 行）
-    pub base_lines: u32,
-    /// 连续滚动连击超时时间（毫秒，默认 50.0ms，超过此间隔重置连击）
+    /// 连续滚动连击超时时间（毫秒，默认 50.0ms）
     pub streak_timeout_ms: f64,
-    /// 进入加速所需的最小连击次数（默认 5 次，防误触）
+    /// 触发加速所需的起步连击保护次数（默认 4 次）
     pub min_streak_for_accel: u32,
-    /// 触摸板与慢速保护阈值（毫秒，默认 7.5ms，>= 此值严格锁定为 base_lines）
-    pub trackpad_lock_threshold_ms: f64,
-    /// 中转速飞轮阈值（毫秒，默认 4.5ms）
-    pub medium_accel_threshold_ms: f64,
-    /// 中转速飞轮基础行数（默认 3 行）
-    pub medium_accel_base_lines: u32,
-    /// 中转速飞轮最大额外加成行数（默认 3 行）
-    pub medium_accel_max_boost: u32,
-    /// 疾速狂转飞轮基础行数（默认 6 行）
-    pub high_accel_base_lines: u32,
-    /// 疾速狂转飞轮最大额外加成行数（默认 8 行）
-    pub high_accel_max_boost: u32,
+
+    /// 1档：单格慢拨 / 逐行精读（>= 50ms，默认 2 行）
+    pub gear1_lines: u32,
+    /// 2档：触摸板平稳手势 / 慢速连续巡航（12ms ~ 50ms，默认 2 行）
+    pub gear2_lines: u32,
+    /// 3档：正常中速看代码（7ms ~ 12ms，默认 4 行）
+    pub gear3_lines: u32,
+    /// 4档：快速连续拨轮（4ms ~ 7ms，默认 8 行）
+    pub gear4_lines: u32,
+    /// 5档：无极飞轮中高速（2ms ~ 4ms，默认 16 行）
+    pub gear5_lines: u32,
+    /// 6档：G502 物理无极飞轮红线极速起飞（< 2ms 超高频，默认 32 行）
+    pub gear6_lines: u32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            base_lines: 1,
             streak_timeout_ms: 50.0,
-            min_streak_for_accel: 5,
-            trackpad_lock_threshold_ms: 7.5,
-            medium_accel_threshold_ms: 4.5,
-            medium_accel_base_lines: 3,
-            medium_accel_max_boost: 3,
-            high_accel_base_lines: 6,
-            high_accel_max_boost: 8,
+            min_streak_for_accel: 4,
+            gear1_lines: 2,
+            gear2_lines: 2,
+            gear3_lines: 4,
+            gear4_lines: 8,
+            gear5_lines: 16,
+            gear6_lines: 32,
         }
     }
 }
 
 const DEFAULT_CONFIG_TOML: &str = r#"# ~/.config/tmux-wheel-accel/config.toml
-# tmux-wheel-accel 核心参数配置文件
-# 修改此文件后无需重启 tmux，下次滚动滚轮立即热加载生效！
+# 6档自适应智能滚轮变速箱配置
+# 保存此文件后无需重启 tmux，下次滚动滚轮立即热重载生效！
 
-# 单格慢拨与逐行精读的基础行数（默认 1 行）
-base_lines = 1
-
-# 连续滚动连击超时时间 (毫秒)
-# 两次事件间隔超过此值时，判定为全新的单次滚动，重置连击计数器
+# 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
 streak_timeout_ms = 50.0
 
-# 进入加速档位所需的最小连续触发次数（防误触保护，默认 5 次）
-min_streak_for_accel = 5
+# 加速起步保护次数（前 N 次滚动严格保持 1档/2档，防误触）
+min_streak_for_accel = 4
 
-# 触摸板与慢速手势保护阈值 (毫秒)
-# 触摸板滑动间隔通常在 12ms ~ 40ms，事件间隔 >= 该值时严格锁定为 base_lines
-trackpad_lock_threshold_ms = 7.5
+# ----------------------------------------------------
+# 6 档位跳行步长配置 (Gear 1 ~ 6)
+# ----------------------------------------------------
 
-# 中转速飞轮阈值 (毫秒)
-medium_accel_threshold_ms = 4.5
+# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 50ms)
+gear1_lines = 2
 
-# 中转速飞轮基础行数与最大额外加成
-medium_accel_base_lines = 3
-medium_accel_max_boost = 3
+# 2档: 触摸板平稳手势 / 中慢速巡航 (时间间隔 12ms ~ 50ms)
+# 触摸板滑动主要落在此档，锁定 2 行保证绝不偏快
+gear2_lines = 2
 
-# G502 / MX Master 物理飞轮疾速狂转 (< medium_accel_threshold_ms) 基础行数与最大加成
-high_accel_base_lines = 6
-high_accel_max_boost = 8
+# 3档: 较快翻阅代码 (时间间隔 7ms ~ 12ms)
+gear3_lines = 4
+
+# 4档: 快速拨轮翻段落 (时间间隔 4ms ~ 7ms)
+gear4_lines = 8
+
+# 5档: G502 无极飞轮中高速旋转 (时间间隔 2ms ~ 4ms)
+gear5_lines = 16
+
+# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (时间间隔 < 2ms 超高频)
+gear6_lines = 32
 "#;
 
 #[repr(C)]
@@ -133,7 +135,7 @@ fn load_config(state_dir: &str) -> Config {
     let mtime_sec = meta.mtime();
     let mtime_nsec = meta.mtime_nsec();
 
-    // 2. 检查二进制缓存是否存在且有效 (直接读取 48 字节内存结构，耗时 < 1 微秒)
+    // 2. 检查二进制缓存是否存在且有效 (读取 56 字节内存结构，耗时 < 1 微秒)
     if let Ok(mut cache_file) = OpenOptions::new().read(true).open(&cache_path) {
         let mut buf = [0u8; std::mem::size_of::<CachedConfigHeader>()];
         if cache_file.read_exact(&mut buf).is_ok() {
@@ -176,22 +178,29 @@ fn load_config(state_dir: &str) -> Config {
     config
 }
 
-/// Calculate dynamic scroll jump lines based on event delta time (ms), streak, and config
+/// 6 档位自适应变速计算
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
-    // 触摸板与慢速手势保护
-    if dt_ms >= cfg.trackpad_lock_threshold_ms || streak < cfg.min_streak_for_accel {
-        return cfg.base_lines;
+    // 1档 / 起步保护
+    if dt_ms >= 50.0 || streak < cfg.min_streak_for_accel {
+        return cfg.gear1_lines;
     }
 
-    let extra_streak = streak.saturating_sub(cfg.min_streak_for_accel);
-
-    if dt_ms >= cfg.medium_accel_threshold_ms {
-        // 中速飞轮
-        cfg.medium_accel_base_lines + extra_streak.min(cfg.medium_accel_max_boost)
+    if dt_ms >= 12.0 {
+        // 2档: 触摸板手势 / 巡航慢速 (锁定 2 行)
+        cfg.gear2_lines
+    } else if dt_ms >= 7.0 {
+        // 3档: 较快翻阅
+        cfg.gear3_lines
+    } else if dt_ms >= 4.0 {
+        // 4档: 快速拨轮
+        cfg.gear4_lines
+    } else if dt_ms >= 2.0 {
+        // 5档: 无极飞轮高速
+        cfg.gear5_lines
     } else {
-        // G502 / MX Master 疾速狂转飞轮
-        cfg.high_accel_base_lines + (extra_streak.min(cfg.high_accel_max_boost / 2) * 2)
+        // 6档: G502 无极飞轮红线极速起飞！
+        cfg.gear6_lines
     }
 }
 
@@ -248,7 +257,7 @@ fn main() {
             calculate_lines(dt_ms, state.streak, &config)
         } else {
             state.streak = 0;
-            config.base_lines
+            config.gear1_lines
         };
 
         state.last_ts_micros = now_micros;
@@ -268,9 +277,9 @@ fn main() {
             .args(["send-keys", "-t", &pane, "-X", "-N", &lines.to_string(), dir_str])
             .status();
     } else {
-        // Fallback: 默认单行滚动
+        // Fallback: 默认走 1档
         let _ = Command::new("tmux")
-            .args(["send-keys", "-t", &pane, "-X", "-N", &config.base_lines.to_string(), dir_str])
+            .args(["send-keys", "-t", &pane, "-X", "-N", &config.gear1_lines.to_string(), dir_str])
             .status();
     }
 }
