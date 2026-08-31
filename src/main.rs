@@ -84,10 +84,10 @@ impl Default for MouseConfig {
     fn default() -> Self {
         Self {
             notch_lines: 1,
-            normal_lines: 3,
-            fast_lines: 8,
-            high_lines: 16,
-            freespin_lines: 32,
+            normal_lines: 4,
+            fast_lines: 12,
+            high_lines: 28,
+            freespin_lines: 64,
         }
     }
 }

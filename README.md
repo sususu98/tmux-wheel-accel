@@ -65,16 +65,16 @@ max_lines = 6
 notch_lines = 1
 
 # 普通中速拨轮 (时间间隔 15ms ~ 40ms)
-normal_lines = 3
+normal_lines = 4
 
 # 快速拨轮翻段落 (时间间隔 7ms ~ 15ms)
-fast_lines = 8
+fast_lines = 12
 
 # 无极飞轮中高速旋转 (时间间隔 3ms ~ 7ms)
-high_lines = 16
+high_lines = 28
 
 # G502 物理无极飞轮全力狂转 (< 3ms 超高频) -> 极速起飞！
-freespin_lines = 32
+freespin_lines = 64
 ```
 
 ---
