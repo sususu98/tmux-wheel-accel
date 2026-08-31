@@ -3,11 +3,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Language-Rust-orange.svg)](https://www.rust-lang.org/)
 
-tmux-wheel-accel 是专为 tmux 打造的硬件级设备感知（Device-Aware）动态滚轮变速原生程序。
+tmux-wheel-accel 是专为 tmux 打造的硬件级设备感知（Device-Aware）与多脉冲密度自适应（Pulse-Density Adaptive）滚轮变速原生程序。
 
 通过在 macOS 系统底层（CoreGraphics EventTap）实时感知输入设备类型，彻底解耦 **Apple Magic Trackpad（触控板）** 与 **Logitech G502 / MX Master（鼠标滚轮）**，使两套设备分别运行完全独立的加速曲线。
 
-同时针对 G502 物理特性，严格区分 **刻度齿轮模式（Detent Mode）** 与 **无极飞轮模式（Free-Spin Mode）**，消灭光电编码器微抖动误触发，实现“刻度模式精准逐行不失控，飞轮模式 64 行爆发起飞”。
+同时针对 G502 物理特性，采用 50ms 脉冲密度窗口模型，严格区分 **刻度齿轮模式（Detent Mode）** 与 **无极飞轮模式（Free-Spin Mode）**：
+- 刻度模式：手指拨动 1~4 齿，窗口脉冲数低，严格限制在 1~8 行；
+- 无极飞轮：飞轮惯性狂转时单窗口内涌入 $\ge 8$ 个超高频脉冲，瞬间激活 64 行狂暴起飞。
 
 支持通过 `~/.config/tmux-wheel-accel/config.toml` 独立调优鼠标与触控板参数，具备自动后台守护与修改即时热重载（Hot-Reload）特性。
 
@@ -16,11 +18,10 @@ tmux-wheel-accel 是专为 tmux 打造的硬件级设备感知（Device-Aware）
 ## 核心特性
 
 - 物理级设备自动感知（Device-Aware）：系统底层实时捕获 `kCGScrollWheelEventIsContinuous` 标志位，精准识别当前是触控板在滑还是 G502 鼠标在滚，零延迟自动切换专属配置。
-- 刻度齿轮 vs 无极飞轮 深度物理隔离：
-  - 刻度模式：手指快速拨动 3~5 格时，严格限制在普通/快速拨轮（1~8 行），绝不误入狂暴档；
-  - 无极飞轮：只有物理开关解锁滚轮产生惯性持续旋转（streak >= 8 且 dt < 3ms）时，才激活 64 行狂暴起飞。
+- 50ms 脉冲密度窗口模型（Pulse-Density Windowing）：
+  - 刻度模式：手指单拨/快速划动产生的单次或双脉冲稳稳锁定在 1~8 行；
+  - 无极飞轮：物理解锁飞轮后超高频密集脉冲（$\ge 8$ 次/50ms）精准识别为飞轮旋转，直接释放 64 行极速档。
 - 触控板专属配置（[trackpad]）：专为 macOS 触控板手势调校，慢滑逐行精读（1 行），快划平缓封顶（4~6 行），彻底消灭触控板暴冲。
-- 全设备硬件级去抖（debounce_min_dt_ms = 2.0ms）：精准过滤 G502 光电编码器微抖动与 macOS 同帧重复子包。
 - 微秒级极速执行：纯 Rust 原生构建，无锁、无阻塞、零延迟。
 - 消灭首格滚轮延迟：Root 表瞬发启动，进入 copy-mode 的第一微秒立即同步执行滚动，消灭首格被吞的滞后感。
 - 随时热重载配置：在 `~/.config/tmux-wheel-accel/config.toml` 中自定义两套独立曲线，保存文件即刻生效，无需重启 tmux。
@@ -39,11 +40,8 @@ tmux-wheel-accel 是专为 tmux 打造的硬件级设备感知（Device-Aware）
 # 调试日志开关 (true 时实时写入 /tmp/tmux-wheel-accel.log)
 debug = true
 
-# 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
-streak_timeout_ms = 50.0
-
-# 亚毫秒级硬件去抖阈值 (毫秒，默认 2.0ms，过滤光电微抖动与同帧子包)
-debounce_min_dt_ms = 2.0
+# 连续滚动判定窗口超时 (毫秒，默认 60.0ms)
+streak_timeout_ms = 60.0
 
 # ====================================================
 # 1. Apple Magic Trackpad 触控板专属配置 (温和细腻，绝不暴冲)
@@ -65,19 +63,19 @@ max_lines = 6
 # 2. Logitech G502 鼠标专属配置 (刻度精准，飞轮狂飙)
 # ====================================================
 [mouse]
-# 刻度单拨 / 慢拨精读 (时间间隔 >= 40ms)
+# 刻度单拨 / 慢拨精读 (50ms 窗口内 1 个脉冲)
 notch_lines = 1
 
-# 刻度模式普通中速拨轮 (时间间隔 15ms ~ 40ms)
+# 刻度模式普通中速拨轮 (50ms 窗口内 2 个脉冲)
 normal_lines = 3
 
-# 刻度模式快速划动 (时间间隔 7ms ~ 15ms)
+# 刻度模式快速划动 (50ms 窗口内 3~4 个脉冲)
 fast_lines = 8
 
-# 无极飞轮中高速旋转 (时间间隔 3ms ~ 7ms，需惯性持续旋转 streak >= 8)
+# 无极飞轮中高速旋转 (50ms 窗口内 5~7 个高频脉冲)
 high_lines = 28
 
-# G502 物理无极飞轮全力狂转 (< 3ms 超高频，需惯性持续旋转 streak >= 8) -> 64 行极速起飞！
+# G502 物理无极飞轮全力狂转 (50ms 窗口内 >= 8 个超高频脉冲) -> 64 行极速起飞！
 freespin_lines = 64
 ```
 

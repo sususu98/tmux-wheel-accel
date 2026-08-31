@@ -68,15 +68,15 @@ impl Default for TrackpadConfig {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MouseConfig {
-    /// 刻度单拨 (>= 40ms)
+    /// 刻度单拨 (50ms 内 1 个脉冲)
     pub notch_lines: u32,
-    /// 普通中速拨轮 (15ms ~ 40ms)
+    /// 刻度中速拨轮 (50ms 内 2 个脉冲)
     pub normal_lines: u32,
-    /// 快速拨轮 (7ms ~ 15ms)
+    /// 刻度快速划动 (50ms 内 3~4 个脉冲)
     pub fast_lines: u32,
-    /// 无极飞轮中高速 (3ms ~ 7ms, 需持续旋转 streak >= 8)
+    /// 无极飞轮高速旋转 (50ms 内 5~7 个脉冲)
     pub high_lines: u32,
-    /// G502 物理无极飞轮全力狂转 (< 3ms, 需持续旋转 streak >= 8)
+    /// G502 无极飞轮全力狂转 (50ms 内 >= 8 个高频脉冲) -> 64 行极速起飞！
     pub freespin_lines: u32,
 }
 
@@ -96,7 +96,6 @@ impl Default for MouseConfig {
 pub struct Config {
     pub debug: bool,
     pub streak_timeout_ms: f64,
-    pub debounce_min_dt_ms: f64,
     pub trackpad: TrackpadConfig,
     pub mouse: MouseConfig,
 }
@@ -105,8 +104,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             debug: true,
-            streak_timeout_ms: 50.0,
-            debounce_min_dt_ms: 2.0,
+            streak_timeout_ms: 60.0,
             trackpad: TrackpadConfig::default(),
             mouse: MouseConfig::default(),
         }
@@ -120,11 +118,8 @@ const DEFAULT_CONFIG_TOML: &str = r#"# ~/.config/tmux-wheel-accel/config.toml
 # 调试日志开关 (true 时实时写入 /tmp/tmux-wheel-accel.log)
 debug = true
 
-# 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
-streak_timeout_ms = 50.0
-
-# 亚毫秒级硬件去抖阈值 (毫秒，默认 2.0ms，过滤光电微抖动与同帧子包)
-debounce_min_dt_ms = 2.0
+# 连续滚动判定窗口超时 (毫秒，默认 60.0ms)
+streak_timeout_ms = 60.0
 
 # ====================================================
 # 1. Apple Magic Trackpad 触控板专属配置 (温和细腻，绝不暴冲)
@@ -146,19 +141,19 @@ max_lines = 6
 # 2. Logitech G502 鼠标专属配置 (刻度精准，飞轮狂飙)
 # ====================================================
 [mouse]
-# 刻度单拨 / 慢拨精读 (时间间隔 >= 40ms)
+# 刻度单拨 / 慢拨精读 (50ms 窗口内 1 个脉冲)
 notch_lines = 1
 
-# 刻度模式普通中速拨轮 (时间间隔 15ms ~ 40ms)
+# 刻度模式普通中速拨轮 (50ms 窗口内 2 个脉冲)
 normal_lines = 3
 
-# 刻度模式快速划动 (时间间隔 7ms ~ 15ms)
+# 刻度模式快速划动 (50ms 窗口内 3~4 个脉冲)
 fast_lines = 8
 
-# 无极飞轮中高速旋转 (时间间隔 3ms ~ 7ms，需惯性持续旋转 streak >= 8)
+# 无极飞轮中高速旋转 (50ms 窗口内 5~7 个高频脉冲)
 high_lines = 28
 
-# G502 物理无极飞轮全力狂转 (< 3ms 超高频，需惯性持续旋转 streak >= 8) -> 64 行极速起飞！
+# G502 物理无极飞轮全力狂转 (50ms 窗口内 >= 8 个超高频脉冲) -> 64 行极速起飞！
 freespin_lines = 64
 "#;
 
@@ -166,6 +161,8 @@ freespin_lines = 64
 #[derive(Default, Clone, Copy)]
 struct State {
     last_ts_micros: u64,
+    window_start_micros: u64,
+    events_in_window: u32,
     streak: u32,
     dir_char: u8,
 }
@@ -313,24 +310,28 @@ fn calculate_trackpad_lines(dt_ms: f64, cfg: &TrackpadConfig) -> (u32, &'static 
     }
 }
 
-/// 鼠标计算逻辑 (刻度模式 vs 无极飞轮物理级区分)
+/// 鼠标脉冲密度计算逻辑 (50ms 滑动窗口脉冲率判定)
 #[inline]
-fn calculate_mouse_lines(dt_ms: f64, streak: u32, cfg: &MouseConfig) -> (u32, &'static str) {
-    if dt_ms >= 40.0 || streak < 2 {
-        // 刻度模式：单拨 1 格
-        (cfg.notch_lines, "刻度单拨")
-    } else if dt_ms >= 15.0 {
-        // 刻度模式：普通中速连续拨轮
-        (cfg.normal_lines, "普通拨轮")
-    } else if dt_ms >= 7.0 || streak < 8 {
-        // 刻度模式下即便手指快速划 3~5 格（streak < 8），也严格走快速拨轮，绝不误触飞轮！
-        (cfg.fast_lines, "快速拨轮")
-    } else if dt_ms >= 3.0 {
-        // 只有解锁无极飞轮惯性持续狂转 (streak >= 8) 才能进入飞轮高速！
-        (cfg.high_lines, "无极飞轮高速")
-    } else {
-        // 无极飞轮极速全力狂飙 (< 3ms 且 streak >= 8)
+fn calculate_mouse_lines(
+    events_in_window: u32,
+    dt_ms: f64,
+    cfg: &MouseConfig,
+) -> (u32, &'static str) {
+    if events_in_window >= 8 {
+        // 50ms 窗口内狂涌 >= 8 个高频脉冲 -> 物理无极飞轮狂转起飞！
         (cfg.freespin_lines, "无极飞轮狂转起飞")
+    } else if events_in_window >= 5 {
+        // 50ms 窗口内 5~7 个脉冲 -> 飞轮高速
+        (cfg.high_lines, "无极飞轮高速")
+    } else if events_in_window >= 3 {
+        // 50ms 窗口内 3~4 个脉冲 -> 快速拨轮
+        (cfg.fast_lines, "快速拨轮")
+    } else if events_in_window == 2 || (dt_ms < 40.0 && dt_ms >= 12.0) {
+        // 普通中速拨轮
+        (cfg.normal_lines, "普通拨轮")
+    } else {
+        // 刻度单拨
+        (cfg.notch_lines, "刻度单拨")
     }
 }
 
@@ -387,29 +388,31 @@ fn main() {
             1000.0
         };
 
-        // 亚毫秒级通用去抖（无论鼠标光电微抖动还是触控板同帧子包，全部过滤！）
-        if state.dir_char == dir_char && dt_ms < config.debounce_min_dt_ms {
-            if config.debug {
-                log_debug(&format!(
-                    "[DEBOUNCE: {}] pane: {}, dir: {}, dt: {:.2}ms < {:.2}ms (micro-bounce dropped)",
-                    if is_trackpad { "Trackpad" } else { "Mouse G502" },
-                    pane, dir_str, dt_ms, config.debounce_min_dt_ms
-                ));
-            }
-            return;
-        }
+        // 维护 50ms 脉冲滑动窗口
+        let window_duration_ms = if state.window_start_micros > 0 && now_micros >= state.window_start_micros {
+            (now_micros - state.window_start_micros) as f64 / 1000.0
+        } else {
+            1000.0
+        };
 
-        // 计算连击数 (连续同向滚动且间隔在超时时间内累加)
         if state.dir_char == dir_char && dt_ms < config.streak_timeout_ms {
             state.streak = state.streak.saturating_add(1);
+            if window_duration_ms <= 50.0 {
+                state.events_in_window = state.events_in_window.saturating_add(1);
+            } else {
+                state.window_start_micros = now_micros;
+                state.events_in_window = 1;
+            }
         } else {
-            state.streak = 0;
+            state.streak = 1;
+            state.window_start_micros = now_micros;
+            state.events_in_window = 1;
         }
 
         let (lines, stage) = if is_trackpad {
             calculate_trackpad_lines(dt_ms, &config.trackpad)
         } else {
-            calculate_mouse_lines(dt_ms, state.streak, &config.mouse)
+            calculate_mouse_lines(state.events_in_window, dt_ms, &config.mouse)
         };
 
         state.last_ts_micros = now_micros;
@@ -426,11 +429,12 @@ fn main() {
 
         if config.debug {
             log_debug(&format!(
-                "[SCROLL: {}] pane: {}, dir: {}, dt: {:>6.2}ms, streak: {:>2}, mode: {} -> scroll {} lines",
+                "[SCROLL: {}] pane: {}, dir: {}, dt: {:>6.2}ms, pulses_50ms: {:>2}, streak: {:>3}, mode: {} -> scroll {} lines",
                 if is_trackpad { "Trackpad" } else { "Mouse G502" },
                 pane,
                 dir_str,
                 dt_ms,
+                state.events_in_window,
                 state.streak,
                 stage,
                 lines
