@@ -27,23 +27,21 @@ fn get_now_micros() -> u64 {
 /// Calculate dynamic scroll jump lines based on event delta time (ms) and consecutive streak
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32) -> u32 {
-    // 严格保护：单拨、慢拨或前 3 次触发严格只滚 1 行
-    if streak < 4 || dt_ms >= 50.0 {
+    // 1. 触摸板与普通中慢速滚动保护：
+    // 触摸板连续手势的频率通常在 12ms ~ 40ms (30~80Hz)
+    // 只要时间间隔 >= 7.5ms，或者连击处于前段，绝对严格锁定为 1 行！
+    if dt_ms >= 7.5 || streak < 5 {
         return 1;
     }
 
-    if dt_ms >= 25.0 {
-        // 中速连续滚动 (1 ~ 2 行)
-        1 + ((streak - 3).min(2) / 2)
-    } else if dt_ms >= 12.0 {
-        // 快速连续拨动 (2 ~ 4 行)
-        2 + ((streak - 3).min(4) / 2)
-    } else if dt_ms >= 6.0 {
-        // 用力快速拨轮 (4 ~ 8 行)
-        4 + (streak - 3).min(4)
+    // 2. 只有当物理无极滚轮狂转 (< 7.5ms，通常 2ms ~ 5ms，> 150Hz 超高频物理飞轮)
+    // 且持续旋转时，才平滑升档加速：
+    if dt_ms >= 4.5 {
+        // 中高转速飞轮 (3 ~ 6 行)
+        3 + ((streak - 4).min(3))
     } else {
-        // G502 物理无极飞轮 / MX Master 疾速狂转 (< 6ms 超高频) (8 ~ 18 行)
-        8 + ((streak - 3).min(5) * 2)
+        // G502 极致极速狂转飞轮 (< 4.5ms) (6 ~ 14 行)
+        6 + ((streak - 4).min(4) * 2)
     }
 }
 
