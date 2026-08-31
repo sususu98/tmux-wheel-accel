@@ -45,11 +45,11 @@ impl Default for Config {
             min_streak_for_accel: 4,
             high_gear_min_streak: 25,
             gear1_lines: 1,
-            gear2_lines: 1,
-            gear3_lines: 2,
-            gear4_lines: 4,
-            gear5_lines: 8,
-            gear6_lines: 16,
+            gear2_lines: 2,
+            gear3_lines: 3,
+            gear4_lines: 6,
+            gear5_lines: 12,
+            gear6_lines: 24,
         }
     }
 }
