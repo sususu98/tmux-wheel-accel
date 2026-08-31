@@ -8,10 +8,15 @@ INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "${INSTALL_DIR}"
 
 echo "==> Installing binary to ${INSTALL_DIR}/tmux-wheel-accel..."
+rm -f "${INSTALL_DIR}/tmux-wheel-accel"
 cp target/release/tmux-wheel-accel "${INSTALL_DIR}/tmux-wheel-accel"
 chmod +x "${INSTALL_DIR}/tmux-wheel-accel"
+if command -v codesign &>/dev/null; then
+    codesign -s - -f "${INSTALL_DIR}/tmux-wheel-accel" &>/dev/null || true
+fi
 
 echo "==> Installation complete!"
+echo "Configuration file: ~/.config/tmux-wheel-accel/config.toml (hot-reloadable on save)"
 echo ""
 echo "Please ensure the following lines are in your ~/.tmux.conf:"
 echo ""

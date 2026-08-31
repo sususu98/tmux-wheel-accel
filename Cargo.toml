@@ -1,12 +1,16 @@
 [package]
 name = "tmux-wheel-accel"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["sususu98"]
-description = "Ultra-fast dynamic velocity-based mouse wheel acceleration for tmux (tuned for Logitech G502, MX Master, and Apple Trackpads)"
+description = "Ultra-fast dynamic velocity-based mouse wheel acceleration for tmux with hot-reloadable TOML config"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/sususu98/tmux-wheel-accel"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
 
 [profile.release]
 opt-level = 3
