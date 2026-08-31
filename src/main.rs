@@ -16,20 +16,22 @@ extern "C" {
 pub struct Config {
     /// 连续滚动连击超时时间（毫秒，默认 50.0ms）
     pub streak_timeout_ms: f64,
-    /// 触发加速所需的起步连击保护次数（默认 4 次）
+    /// 触发中速加速所需的起步连击保护次数（默认 4 次）
     pub min_streak_for_accel: u32,
+    /// 进入 5档/6档 高速飞轮所需的持续连击门槛（默认 20 次，防止触控板快速轻拂误触高档位）
+    pub high_gear_min_streak: u32,
 
-    /// 1档：单格慢拨 / 逐行精读（>= 50ms，默认 2 行）
+    /// 1档：单格慢拨 / 逐行精读（>= 50ms，默认 1 行）
     pub gear1_lines: u32,
-    /// 2档：触摸板平稳手势 / 慢速连续巡航（12ms ~ 50ms，默认 2 行）
+    /// 2档：触摸板平稳手势 / 慢速连续巡航（12ms ~ 50ms，默认 1 行）
     pub gear2_lines: u32,
-    /// 3档：正常中速看代码（7ms ~ 12ms，默认 4 行）
+    /// 3档：较快翻阅代码（7ms ~ 12ms，默认 2 行）
     pub gear3_lines: u32,
-    /// 4档：快速连续拨轮（4ms ~ 7ms，默认 8 行）
+    /// 4档：快速连续拨轮（4ms ~ 7ms，默认 4 行）
     pub gear4_lines: u32,
-    /// 5档：无极飞轮中高速（2ms ~ 4ms，默认 16 行）
+    /// 5档：无极飞轮中高速（2.5ms ~ 4ms，需要 streak >= high_gear_min_streak，默认 10 行）
     pub gear5_lines: u32,
-    /// 6档：G502 物理无极飞轮红线极速起飞（< 2ms 超高频，默认 32 行）
+    /// 6档：G502 物理飞轮红线狂转（< 2.5ms，需要 streak >= high_gear_min_streak，默认 24 行）
     pub gear6_lines: u32,
 }
 
@@ -38,12 +40,13 @@ impl Default for Config {
         Self {
             streak_timeout_ms: 50.0,
             min_streak_for_accel: 4,
+            high_gear_min_streak: 20,
             gear1_lines: 1,
             gear2_lines: 1,
-            gear3_lines: 4,
-            gear4_lines: 8,
-            gear5_lines: 16,
-            gear6_lines: 32,
+            gear3_lines: 2,
+            gear4_lines: 4,
+            gear5_lines: 10,
+            gear6_lines: 24,
         }
     }
 }
@@ -58,28 +61,33 @@ streak_timeout_ms = 50.0
 # 加速起步保护次数（前 N 次滚动严格保持 1档/2档，防误触）
 min_streak_for_accel = 4
 
+# 进入 5档/6档 极速飞轮所需的持续连击门槛（默认 20 次）
+# 触控板划一下通常只有 10~15 个微事件，会被安全锁在 1~3档（绝不会飞掉上千行）；
+# 只有 G502 物理飞轮持续长旋超过 20 次连击，才会平滑升入 5档/6档
+high_gear_min_streak = 20
+
 # ----------------------------------------------------
 # 6 档位跳行步长配置 (Gear 1 ~ 6)
 # ----------------------------------------------------
 
 # 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 50ms)
-gear1_lines = 2
+gear1_lines = 1
 
 # 2档: 触摸板平稳手势 / 中慢速巡航 (时间间隔 12ms ~ 50ms)
-# 触摸板滑动主要落在此档，锁定 2 行保证绝不偏快
-gear2_lines = 2
+# 触摸板滑动主要落在此档，锁定 1 行保证极致细腻不偏快
+gear2_lines = 1
 
 # 3档: 较快翻阅代码 (时间间隔 7ms ~ 12ms)
-gear3_lines = 4
+gear3_lines = 2
 
 # 4档: 快速拨轮翻段落 (时间间隔 4ms ~ 7ms)
-gear4_lines = 8
+gear4_lines = 4
 
-# 5档: G502 无极飞轮中高速旋转 (时间间隔 2ms ~ 4ms)
-gear5_lines = 16
+# 5档: G502 无极飞轮中高速旋转 (时间间隔 2.5ms ~ 4ms, 需连击 >= high_gear_min_streak)
+gear5_lines = 10
 
-# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (时间间隔 < 2ms 超高频)
-gear6_lines = 32
+# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (时间间隔 < 2.5ms, 需连击 >= high_gear_min_streak)
+gear6_lines = 24
 "#;
 
 #[repr(C)]
@@ -135,7 +143,7 @@ fn load_config(state_dir: &str) -> Config {
     let mtime_sec = meta.mtime();
     let mtime_nsec = meta.mtime_nsec();
 
-    // 2. 检查二进制缓存是否存在且有效 (读取 56 字节内存结构，耗时 < 1 微秒)
+    // 2. 检查二进制缓存是否存在且有效 (读取 64 字节内存结构，耗时 < 1 微秒)
     if let Ok(mut cache_file) = OpenOptions::new().read(true).open(&cache_path) {
         let mut buf = [0u8; std::mem::size_of::<CachedConfigHeader>()];
         if cache_file.read_exact(&mut buf).is_ok() {
@@ -178,7 +186,7 @@ fn load_config(state_dir: &str) -> Config {
     config
 }
 
-/// 6 档位自适应变速计算
+/// 6 档位自适应变速计算（结合速度 dt 与连击深度 streak 双重把关）
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
     // 1档 / 起步保护
@@ -187,7 +195,7 @@ fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
     }
 
     if dt_ms >= 12.0 {
-        // 2档: 触摸板手势 / 巡航慢速 (锁定 2 行)
+        // 2档: 触摸板常规平稳手势 (严格 1 行)
         cfg.gear2_lines
     } else if dt_ms >= 7.0 {
         // 3档: 较快翻阅
@@ -195,12 +203,18 @@ fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
     } else if dt_ms >= 4.0 {
         // 4档: 快速拨轮
         cfg.gear4_lines
-    } else if dt_ms >= 2.0 {
-        // 5档: 无极飞轮高速
-        cfg.gear5_lines
     } else {
-        // 6档: G502 无极飞轮红线极速起飞！
-        cfg.gear6_lines
+        // 只有连击深度 >= high_gear_min_streak (G502 持续飞轮)，才允许升入 5档 / 6档
+        // 触摸板快速划一下只有 10~15 个事件，会被安全限制在 4档 (4行) 以内
+        if streak >= cfg.high_gear_min_streak {
+            if dt_ms >= 2.5 {
+                cfg.gear5_lines
+            } else {
+                cfg.gear6_lines
+            }
+        } else {
+            cfg.gear4_lines
+        }
     }
 }
 
