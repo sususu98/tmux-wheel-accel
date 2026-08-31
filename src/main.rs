@@ -22,20 +22,20 @@ pub struct Config {
     pub debounce_min_dt_ms: f64,
     /// 触发加速所需的起步连击保护次数（默认 3 次）
     pub min_streak_for_accel: u32,
-    /// 进入 5档/6档 极速起飞所需的连击门槛（默认 8 次）
+    /// 进入 5档/6档 极速起飞所需的连击门槛（默认 6 次）
     pub high_gear_min_streak: u32,
 
-    /// 1档：慢拨 / 逐行精读（>= 30ms，默认 1 行）
+    /// 1档：慢拨 / 逐行精读（>= 35ms，默认 1 行）
     pub gear1_lines: u32,
-    /// 2档：触控板平稳慢速滑动（18ms ~ 30ms，默认 1 行）
+    /// 2档：触控板标准 60Hz 慢速滑动（14ms ~ 35ms，默认 1 行，慢滑绝对细腻）
     pub gear2_lines: u32,
-    /// 3档：中速翻阅（10ms ~ 18ms，默认 3 行）
+    /// 3档：触控板中速翻阅（9ms ~ 14ms，默认 2 行）
     pub gear3_lines: u32,
-    /// 4档：快速划动 / 快速拨轮（6ms ~ 10ms，默认 6 行）
+    /// 4档：触控板快速轻拂 / 快速拨轮（5.5ms ~ 9ms，默认 5 行）
     pub gear4_lines: u32,
-    /// 5档：高速飞划 / 飞轮高速（3ms ~ 6ms，默认 12 行）
+    /// 5档：高速飞划 / 飞轮高速（3ms ~ 5.5ms，默认 10 行）
     pub gear5_lines: u32,
-    /// 6档：触控板用力快划 / G502 物理飞轮全力狂转（< 3ms，默认 24 行）
+    /// 6档：连续快速狂划 / G502 飞轮极速（< 3ms，默认 20 行）
     pub gear6_lines: u32,
 }
 
@@ -46,19 +46,20 @@ impl Default for Config {
             streak_timeout_ms: 50.0,
             debounce_min_dt_ms: 2.0,
             min_streak_for_accel: 3,
-            high_gear_min_streak: 8,
+            high_gear_min_streak: 6,
             gear1_lines: 1,
             gear2_lines: 1,
-            gear3_lines: 3,
-            gear4_lines: 6,
-            gear5_lines: 12,
-            gear6_lines: 24,
+            gear3_lines: 2,
+            gear4_lines: 5,
+            gear5_lines: 10,
+            gear6_lines: 20,
         }
     }
 }
 
 const DEFAULT_CONFIG_TOML: &str = r#"# ~/.config/tmux-wheel-accel/config.toml
-# 宽动态范围 6档自适应智能滚轮变速箱配置
+# 实测硬件频段校准 6档自适应智能滚轮变速箱配置
+# 慢滑 (14ms~35ms 60Hz帧) 严格 1 行，快划 (< 9ms) 5~20 行爆发！
 # 保存此文件后无需重启 tmux，下次滚动滚轮立即热重载生效！
 
 # 调试日志开关 (true 时实时写入 /tmp/tmux-wheel-accel.log)
@@ -73,30 +74,30 @@ debounce_min_dt_ms = 2.0
 # 加速起步保护次数（默认 3 次）
 min_streak_for_accel = 3
 
-# 进入 5档/6档 高速爆发所需的连击门槛（默认 8 次）
-high_gear_min_streak = 8
+# 进入 5档/6档 高速爆发所需的连击门槛（默认 6 次）
+high_gear_min_streak = 6
 
 # ----------------------------------------------------
 # 6 档位跳行步长配置 (Gear 1 ~ 6)
 # ----------------------------------------------------
 
-# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 30ms) -> 绝对慢，严格 1 行
+# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 35ms) -> 严格 1 行
 gear1_lines = 1
 
-# 2档: 触控板平稳慢滑 (时间间隔 18ms ~ 30ms) -> 依然保持 1 行，逐行细腻
+# 2档: 触控板标准 60Hz 平稳慢滑 (时间间隔 14ms ~ 35ms) -> 严格 1 行，慢的时候绝对够慢！
 gear2_lines = 1
 
-# 3档: 中速翻阅代码 (时间间隔 10ms ~ 18ms) -> 3 行
-gear3_lines = 3
+# 3档: 触控板中速手势 (时间间隔 9ms ~ 14ms) -> 2 行
+gear3_lines = 2
 
-# 4档: 快速划动手势 / 快速拨轮 (时间间隔 6ms ~ 10ms) -> 6 行
-gear4_lines = 6
+# 4档: 触控板快速轻拂 / 120Hz 快速手势 (时间间隔 5.5ms ~ 9ms) -> 5 行
+gear4_lines = 5
 
-# 5档: 高速飞划 / 飞轮高速旋转 (时间间隔 3ms ~ 6ms, 需连击 >= 8) -> 12 行
-gear5_lines = 12
+# 5档: 高速飞划 / 飞轮高速旋转 (时间间隔 3ms ~ 5.5ms, 需连击 >= 6) -> 10 行
+gear5_lines = 10
 
-# 6档: 触控板用力快划 / G502 物理飞轮狂转 (时间间隔 < 3ms, 需连击 >= 8) -> 24 行爆发起飞！
-gear6_lines = 24
+# 6档: 连续快速狂划 / G502 物理飞轮狂转 (时间间隔 < 3ms, 需连击 >= 6) -> 20 行爆发起飞！
+gear6_lines = 20
 "#;
 
 #[repr(C)]
@@ -195,22 +196,29 @@ fn load_config(state_dir: &str) -> Config {
     config
 }
 
-/// 6 档位宽动态范围自适应变速计算，返回 (行数, 档位)
+/// 6 档位实测硬件频段校准自适应变速计算，返回 (行数, 档位)
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> (u32, u8) {
-    if dt_ms >= 30.0 || streak < cfg.min_streak_for_accel {
+    if dt_ms >= 35.0 || streak < cfg.min_streak_for_accel {
+        // 1档: 单格慢拨 / 逐行精读 (1 行)
         (cfg.gear1_lines, 1)
-    } else if dt_ms >= 18.0 {
+    } else if dt_ms >= 14.0 {
+        // 2档: 触控板标准 60Hz 帧 (14ms ~ 35ms) -> 严格 1 行，慢滑绝对细腻！
         (cfg.gear2_lines, 2)
-    } else if dt_ms >= 10.0 {
+    } else if dt_ms >= 9.0 {
+        // 3档: 触控板中速翻阅 (9ms ~ 14ms) -> 2 行
         (cfg.gear3_lines, 3)
-    } else if dt_ms >= 6.0 {
+    } else if dt_ms >= 5.5 {
+        // 4档: 触控板快速轻拂 / 120Hz 快速手势 (5.5ms ~ 9ms) -> 5 行
         (cfg.gear4_lines, 4)
     } else {
+        // 5档/6档: 达到起步连击门槛 (streak >= 6) 即进入高速起飞
         if streak >= cfg.high_gear_min_streak {
             if dt_ms >= 3.0 {
+                // 5档: 高速飞划 / 飞轮高速 (10 行)
                 (cfg.gear5_lines, 5)
             } else {
+                // 6档: 连续快速狂划 / 飞轮狂转 (20 行)
                 (cfg.gear6_lines, 6)
             }
         } else {
