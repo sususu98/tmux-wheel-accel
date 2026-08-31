@@ -73,13 +73,13 @@ notch_lines = 1
 normal_lines = 3
 
 # 刻度模式快速划动 (手指用力划 4~7 格)
-fast_lines = 8
+fast_lines = 6
 
 # 无极飞轮中高速旋转 (惯性持续旋转 streak 8 ~ 15)
-high_lines = 28
+high_lines = 14
 
-# G502 物理无极飞轮全力狂转 (惯性持续旋转 streak >= 16) -> 64 行极速起飞！
-freespin_lines = 64
+# G502 物理无极飞轮狂转 (惯性持续旋转 streak >= 16) -> 24 行舒适高速
+freespin_lines = 24
 ```
 
 ---
