@@ -14,6 +14,8 @@ extern "C" {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Config {
+    /// 调试日志开关（true 时向 /tmp/tmux-wheel-accel.log 输出实时判定日志）
+    pub debug: bool,
     /// 连续滚动连击超时时间（毫秒，默认 50.0ms）
     pub streak_timeout_ms: f64,
     /// 亚毫秒级同帧子包去抖阈值（毫秒，默认 2.0ms）
@@ -25,7 +27,7 @@ pub struct Config {
 
     /// 1档：慢拨 / 逐行精读（>= 30ms，默认 1 行）
     pub gear1_lines: u32,
-    /// 2档：触控板平稳慢速滑动（18ms ~ 30ms，默认 1 行，保证慢的时候绝对够慢）
+    /// 2档：触控板平稳慢速滑动（18ms ~ 30ms，默认 1 行）
     pub gear2_lines: u32,
     /// 3档：中速翻阅（10ms ~ 18ms，默认 3 行）
     pub gear3_lines: u32,
@@ -33,13 +35,14 @@ pub struct Config {
     pub gear4_lines: u32,
     /// 5档：高速飞划 / 飞轮高速（3ms ~ 6ms，默认 12 行）
     pub gear5_lines: u32,
-    /// 6档：触控板用力快划 / G502 物理飞轮全力狂转（< 3ms，默认 24 行，保证快的时候真正起飞）
+    /// 6档：触控板用力快划 / G502 物理飞轮全力狂转（< 3ms，默认 24 行）
     pub gear6_lines: u32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            debug: true,
             streak_timeout_ms: 50.0,
             debounce_min_dt_ms: 2.0,
             min_streak_for_accel: 3,
@@ -56,8 +59,10 @@ impl Default for Config {
 
 const DEFAULT_CONFIG_TOML: &str = r#"# ~/.config/tmux-wheel-accel/config.toml
 # 宽动态范围 6档自适应智能滚轮变速箱配置
-# 慢的时候绝对细腻 (1行)，快的时候真正起飞 (24行)！
 # 保存此文件后无需重启 tmux，下次滚动滚轮立即热重载生效！
+
+# 调试日志开关 (true 时实时写入 /tmp/tmux-wheel-accel.log)
+debug = true
 
 # 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
 streak_timeout_ms = 50.0
@@ -147,7 +152,7 @@ fn load_config(state_dir: &str) -> Config {
     let mtime_sec = meta.mtime();
     let mtime_nsec = meta.mtime_nsec();
 
-    // 2. 检查二进制缓存是否存在且有效 (读取 64 字节内存结构，耗时 < 1 微秒)
+    // 2. 检查二进制缓存是否存在且有效
     if let Ok(mut cache_file) = OpenOptions::new().read(true).open(&cache_path) {
         let mut buf = [0u8; std::mem::size_of::<CachedConfigHeader>()];
         if cache_file.read_exact(&mut buf).is_ok() {
@@ -190,34 +195,37 @@ fn load_config(state_dir: &str) -> Config {
     config
 }
 
-/// 6 档位宽动态范围自适应变速计算
+/// 6 档位宽动态范围自适应变速计算，返回 (行数, 档位)
 #[inline]
-fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
-    // 1档: 慢速精读或慢速起步 (严格 1 行，绝对够慢)
+fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> (u32, u8) {
     if dt_ms >= 30.0 || streak < cfg.min_streak_for_accel {
-        return cfg.gear1_lines;
-    }
-
-    if dt_ms >= 18.0 {
-        // 2档: 触控板平稳慢滑 (依然 1 行)
-        cfg.gear2_lines
+        (cfg.gear1_lines, 1)
+    } else if dt_ms >= 18.0 {
+        (cfg.gear2_lines, 2)
     } else if dt_ms >= 10.0 {
-        // 3档: 中速翻阅 (3 行)
-        cfg.gear3_lines
+        (cfg.gear3_lines, 3)
     } else if dt_ms >= 6.0 {
-        // 4档: 快速划动手势 (6 行)
-        cfg.gear4_lines
+        (cfg.gear4_lines, 4)
     } else {
-        // 5档/6档: 达到高档位门槛 (streak >= 8) 即刻爆发起飞！
         if streak >= cfg.high_gear_min_streak {
             if dt_ms >= 3.0 {
-                cfg.gear5_lines
+                (cfg.gear5_lines, 5)
             } else {
-                cfg.gear6_lines
+                (cfg.gear6_lines, 6)
             }
         } else {
-            cfg.gear4_lines
+            (cfg.gear4_lines, 4)
         }
+    }
+}
+
+fn log_debug(msg: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/tmux-wheel-accel.log")
+    {
+        let _ = writeln!(file, "{}", msg);
     }
 }
 
@@ -269,17 +277,23 @@ fn main() {
             1000.0
         };
 
-        // 亚毫秒级去抖：仅过滤 < 2.0ms 的同帧重复包
+        // 亚毫秒级去抖
         if state.dir_char == dir_char && dt_ms < config.debounce_min_dt_ms {
+            if config.debug {
+                log_debug(&format!(
+                    "[DEBOUNCE] pane: {}, dir: {}, dt: {:.2}ms < {:.2}ms (duplicate sub-packet dropped)",
+                    pane, dir_str, dt_ms, config.debounce_min_dt_ms
+                ));
+            }
             return;
         }
 
-        let lines = if state.dir_char == dir_char && dt_ms < config.streak_timeout_ms {
+        let (lines, gear) = if state.dir_char == dir_char && dt_ms < config.streak_timeout_ms {
             state.streak = state.streak.saturating_add(1);
             calculate_lines(dt_ms, state.streak, &config)
         } else {
             state.streak = 0;
-            config.gear1_lines
+            (config.gear1_lines, 1)
         };
 
         state.last_ts_micros = now_micros;
@@ -293,6 +307,13 @@ fn main() {
             )
         };
         let _ = file.write_all(slice);
+
+        if config.debug {
+            log_debug(&format!(
+                "[SCROLL] pane: {}, dir: {}, dt: {:>6.2}ms, streak: {:>2}, gear: {}档 -> scroll {} lines",
+                pane, dir_str, dt_ms, state.streak, gear, lines
+            ));
+        }
 
         // 执行 tmux 滚动指令
         let _ = Command::new("tmux")
