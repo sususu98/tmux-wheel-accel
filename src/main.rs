@@ -27,21 +27,25 @@ fn get_now_micros() -> u64 {
 /// Calculate dynamic scroll jump lines based on event delta time (ms) and consecutive streak
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32) -> u32 {
-    if dt_ms >= 130.0 {
-        // 单次慢拨刻度 / 逐行精读模式
+    if dt_ms >= 60.0 {
+        // 单格慢拨 / 逐行精读 (1 行)
         1
-    } else if dt_ms >= 70.0 {
-        // 慢速连续滚动
-        2
-    } else if dt_ms >= 35.0 {
-        // 中速正常翻阅 (3 ~ 6 行)
-        3 + streak.min(3)
-    } else if dt_ms >= 18.0 {
-        // 快速拨轮 (8 ~ 20 行)
-        8 + streak.min(6) * 2
+    } else if dt_ms >= 25.0 {
+        // 正常中速滑屏 / 触控板平稳连续滑动 (1 ~ 2 行)
+        if streak > 6 {
+            2
+        } else {
+            1
+        }
+    } else if dt_ms >= 12.0 {
+        // 较快拨动 (2 ~ 4 行)
+        2 + (streak.min(4) / 2)
+    } else if dt_ms >= 6.0 {
+        // 快速用力拨轮 (4 ~ 8 行)
+        4 + streak.min(4)
     } else {
-        // G502 无极飞轮 / MX Master 疾速滚轮 (< 18ms 高频连续物理事件)
-        16 + streak.min(10) * 3
+        // G502 无极飞轮 / MX Master 疾速高频狂转 (< 6ms 超高频) (8 ~ 18 行)
+        8 + (streak.min(5) * 2)
     }
 }
 
@@ -90,7 +94,7 @@ fn main() {
             1000.0
         };
 
-        let lines = if state.dir_char == dir_char && dt_ms < 130.0 {
+        let lines = if state.dir_char == dir_char && dt_ms < 70.0 {
             state.streak = state.streak.saturating_add(1);
             calculate_lines(dt_ms, state.streak)
         } else {
