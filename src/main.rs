@@ -16,22 +16,24 @@ extern "C" {
 pub struct Config {
     /// 连续滚动连击超时时间（毫秒，默认 50.0ms）
     pub streak_timeout_ms: f64,
-    /// 触发中速加速所需的起步连击保护次数（默认 4 次）
+    /// 亚毫秒重复子包去抖阈值（毫秒，默认 3.5ms，小于该间隔的同帧重复包直接合并去抖）
+    pub debounce_min_dt_ms: f64,
+    /// 触发加速所需的起步连击保护次数（默认 4 次）
     pub min_streak_for_accel: u32,
-    /// 进入 5档/6档 高速飞轮所需的持续连击门槛（默认 20 次，防止触控板快速轻拂误触高档位）
+    /// 进入 5档/6档 极速飞轮所需的持续连击门槛（默认 25 次）
     pub high_gear_min_streak: u32,
 
-    /// 1档：单格慢拨 / 逐行精读（>= 50ms，默认 1 行）
+    /// 1档：单格慢拨 / 逐行精读（>= 45ms，默认 1 行）
     pub gear1_lines: u32,
-    /// 2档：触摸板平稳手势 / 慢速连续巡航（12ms ~ 50ms，默认 1 行）
+    /// 2档：触摸板平稳手势 / 慢速连续巡航（12ms ~ 45ms，默认 1 行）
     pub gear2_lines: u32,
     /// 3档：较快翻阅代码（7ms ~ 12ms，默认 2 行）
     pub gear3_lines: u32,
-    /// 4档：快速连续拨轮（4ms ~ 7ms，默认 4 行）
+    /// 4档：快速连续拨轮（4.5ms ~ 7ms，默认 4 行）
     pub gear4_lines: u32,
-    /// 5档：无极飞轮中高速（2.5ms ~ 4ms，需要 streak >= high_gear_min_streak，默认 10 行）
+    /// 5档：无极飞轮中高速（3.5ms ~ 4.5ms，需 streak >= high_gear_min_streak，默认 8 行）
     pub gear5_lines: u32,
-    /// 6档：G502 物理飞轮红线狂转（< 2.5ms，需要 streak >= high_gear_min_streak，默认 24 行）
+    /// 6档：G502 物理飞轮全力狂转（需 streak >= high_gear_min_streak，默认 16 行）
     pub gear6_lines: u32,
 }
 
@@ -39,14 +41,15 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             streak_timeout_ms: 50.0,
+            debounce_min_dt_ms: 3.5,
             min_streak_for_accel: 4,
-            high_gear_min_streak: 20,
+            high_gear_min_streak: 25,
             gear1_lines: 1,
             gear2_lines: 1,
             gear3_lines: 2,
             gear4_lines: 4,
-            gear5_lines: 10,
-            gear6_lines: 24,
+            gear5_lines: 8,
+            gear6_lines: 16,
         }
     }
 }
@@ -58,36 +61,40 @@ const DEFAULT_CONFIG_TOML: &str = r#"# ~/.config/tmux-wheel-accel/config.toml
 # 连续滚动判定阈值 (毫秒，两次事件间隔超过此值重置连击)
 streak_timeout_ms = 50.0
 
+# 亚毫秒级同帧子包去抖阈值 (毫秒，默认 3.5ms)
+# macOS / iTerm2 在每个 60Hz 帧内会发出 < 1ms 的成对子包，去抖过滤后可彻底消除触控板暴冲
+debounce_min_dt_ms = 3.5
+
 # 加速起步保护次数（前 N 次滚动严格保持 1档/2档，防误触）
 min_streak_for_accel = 4
 
-# 进入 5档/6档 极速飞轮所需的持续连击门槛（默认 20 次）
+# 进入 5档/6档 极速飞轮所需的持续连击门槛（默认 25 次）
 # 触控板划一下通常只有 10~15 个微事件，会被安全锁在 1~3档（绝不会飞掉上千行）；
-# 只有 G502 物理飞轮持续长旋超过 20 次连击，才会平滑升入 5档/6档
-high_gear_min_streak = 20
+# 只有 G502 物理飞轮持续长旋超过 25 次连击，才会平滑升入 5档/6档
+high_gear_min_streak = 25
 
 # ----------------------------------------------------
 # 6 档位跳行步长配置 (Gear 1 ~ 6)
 # ----------------------------------------------------
 
-# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 50ms)
+# 1档: 单格慢拨 / 逐行精读 (时间间隔 >= 45ms)
 gear1_lines = 1
 
-# 2档: 触摸板平稳手势 / 中慢速巡航 (时间间隔 12ms ~ 50ms)
+# 2档: 触摸板平稳手势 / 中慢速巡航 (时间间隔 12ms ~ 45ms)
 # 触摸板滑动主要落在此档，锁定 1 行保证极致细腻不偏快
 gear2_lines = 1
 
 # 3档: 较快翻阅代码 (时间间隔 7ms ~ 12ms)
 gear3_lines = 2
 
-# 4档: 快速拨轮翻段落 (时间间隔 4ms ~ 7ms)
+# 4档: 快速拨轮翻段落 (时间间隔 4.5ms ~ 7ms)
 gear4_lines = 4
 
-# 5档: G502 无极飞轮中高速旋转 (时间间隔 2.5ms ~ 4ms, 需连击 >= high_gear_min_streak)
-gear5_lines = 10
+# 5档: G502 无极飞轮中高速旋转 (时间间隔 3.5ms ~ 4.5ms, 需连击 >= high_gear_min_streak)
+gear5_lines = 8
 
-# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (时间间隔 < 2.5ms, 需连击 >= high_gear_min_streak)
-gear6_lines = 24
+# 6档: G502 物理无极飞轮全力狂转 / 疾速起飞 (需连击 >= high_gear_min_streak)
+gear6_lines = 16
 "#;
 
 #[repr(C)]
@@ -186,11 +193,11 @@ fn load_config(state_dir: &str) -> Config {
     config
 }
 
-/// 6 档位自适应变速计算（结合速度 dt 与连击深度 streak 双重把关）
+/// 6 档位自适应变速计算（去抖 + 速度 dt 与连击深度 streak 双重把关）
 #[inline]
 fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
     // 1档 / 起步保护
-    if dt_ms >= 50.0 || streak < cfg.min_streak_for_accel {
+    if dt_ms >= 45.0 || streak < cfg.min_streak_for_accel {
         return cfg.gear1_lines;
     }
 
@@ -198,16 +205,16 @@ fn calculate_lines(dt_ms: f64, streak: u32, cfg: &Config) -> u32 {
         // 2档: 触摸板常规平稳手势 (严格 1 行)
         cfg.gear2_lines
     } else if dt_ms >= 7.0 {
-        // 3档: 较快翻阅
+        // 3档: 较快翻阅 (2 行)
         cfg.gear3_lines
-    } else if dt_ms >= 4.0 {
-        // 4档: 快速拨轮
+    } else if dt_ms >= 4.5 {
+        // 4档: 快速拨轮 (4 行)
         cfg.gear4_lines
     } else {
-        // 只有连击深度 >= high_gear_min_streak (G502 持续飞轮)，才允许升入 5档 / 6档
-        // 触摸板快速划一下只有 10~15 个事件，会被安全限制在 4档 (4行) 以内
+        // 只有连击深度 >= high_gear_min_streak (G502 持续物理飞轮)，才允许升入 5档 / 6档
+        // 触摸板快速划一下只有 10~15 个事件，会被安全限制在 3~4 档
         if streak >= cfg.high_gear_min_streak {
-            if dt_ms >= 2.5 {
+            if dt_ms >= 3.5 {
                 cfg.gear5_lines
             } else {
                 cfg.gear6_lines
@@ -265,6 +272,12 @@ fn main() {
         } else {
             1000.0
         };
+
+        // 关键去抖保护：如果同一个方向的事件间隔 < debounce_min_dt_ms (3.5ms)，
+        // 说明是 macOS/iTerm2 同一物理帧内丢出来的成对子包，直接去抖忽略，防止微观成对子包造成速度误翻倍！
+        if state.dir_char == dir_char && dt_ms < config.debounce_min_dt_ms {
+            return;
+        }
 
         let lines = if state.dir_char == dir_char && dt_ms < config.streak_timeout_ms {
             state.streak = state.streak.saturating_add(1);
