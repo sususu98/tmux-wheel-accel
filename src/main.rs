@@ -38,8 +38,8 @@ impl Default for Config {
         Self {
             streak_timeout_ms: 50.0,
             min_streak_for_accel: 4,
-            gear1_lines: 2,
-            gear2_lines: 2,
+            gear1_lines: 1,
+            gear2_lines: 1,
             gear3_lines: 4,
             gear4_lines: 8,
             gear5_lines: 16,
